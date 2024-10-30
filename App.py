@@ -1,7 +1,6 @@
 import csv
 from flask import Flask, render_template, request, send_from_directory
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import MinMaxScaler
+import math
 import os
 
 app = Flask(__name__)
@@ -26,27 +25,34 @@ def load_car_data(file_path):
 # Load the cars data
 cars_data = load_car_data('Malaysian_Dataset_final.csv')
 
+# Function to calculate cosine similarity
+def cosine_similarity(vec_a, vec_b):
+    dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = math.sqrt(sum(a ** 2 for a in vec_a))
+    norm_b = math.sqrt(sum(b ** 2 for b in vec_b))
+    
+    if norm_a == 0 or norm_b == 0:
+        return 0
+    return dot_product / (norm_a * norm_b)
+
 # Function to get recommendations by cosine similarity
 def get_recommendations_by_cosine_similarity(user_preferences):
-    car_features = [[car['Price (RM)'], car['Fuel_Consumption'], car['Seats'], car['Boot_Capacity'], 
-                     car['Total Displacement (CC)'], car['Fuel_Tank']] for car in cars_data]
-    
-    # Normalize features
-    scaler = MinMaxScaler()
-    normalized_car_features = scaler.fit_transform(car_features)
-    normalized_user_preferences = scaler.transform(user_preferences)
-    
-    # Calculate cosine similarity
-    similarity_scores = cosine_similarity(normalized_car_features, normalized_user_preferences)
-    
-    # Combine similarity scores with cars data
     recommendations = []
-    for car, score in zip(cars_data, similarity_scores):
-        car_copy = car.copy()
-        car_copy['Similarity'] = round(score[0] * 100, 2)
-        if car_copy['Similarity'] > 0:
+    for car in cars_data:
+        car_features = [
+            car['Price (RM)'],
+            car['Fuel_Consumption'],
+            car['Seats'],
+            car['Boot_Capacity'],
+            car['Total Displacement (CC)'],
+            car['Fuel_Tank']
+        ]
+        similarity_score = cosine_similarity(user_preferences[0], car_features)
+        if similarity_score > 0:
+            car_copy = car.copy()
+            car_copy['Similarity'] = round(similarity_score * 100, 2)
             recommendations.append(car_copy)
-    
+
     # Sort by similarity
     recommendations_sorted = sorted(recommendations, key=lambda x: x['Similarity'], reverse=True)
     return recommendations_sorted
