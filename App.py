@@ -1,83 +1,87 @@
-import csv
 from flask import Flask, render_template, request, send_from_directory
-import math
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import MinMaxScaler
 import os
+import firebase_admin
+from firebase_admin import credentials, db
 
 app = Flask(__name__)
 
-# Load the car data without pandas
-def load_car_data(file_path):
-    cars = []
-    with open(file_path, newline='') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            # Convert columns to appropriate types
-            row['Price (RM)'] = float(row['Price (RM)']) if row['Price (RM)'] else 0.0
-            row['Fuel_Consumption'] = float(row['Fuel_Consumption']) if row['Fuel_Consumption'] else 0.0
-            row['Seats'] = int(row['Seats']) if row['Seats'] else 0
-            row['Boot_Capacity'] = int(row['Boot_Capacity']) if row['Boot_Capacity'] else 0
-            row['Total Displacement (CC)'] = int(row['Total Displacement (CC)']) if row['Total Displacement (CC)'] else 0
-            row['Fuel_Tank'] = float(row['Fuel_Tank']) if row['Fuel_Tank'] else 0.0
-            row['ID'] = int(row['ID']) if row['ID'] else 0
-            cars.append(row)
-    return cars
+# Initialize Firebase Admin SDK with your service account credentials
+cred = credentials.Certificate('C:/Users/User/Desktop/Carisma-Web/serviceAccountKey.json')  # Replace with the path to your downloaded service account file
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://carisma-bc876-default-rtdb.asia-southeast1.firebasedatabase.app'
+})
+
+# Function to load data from Firebase Realtime Database
+def load_cars_data():
+    ref = db.reference('data')
+    cars_data = ref.get()
+
+    # Handle the case where cars_data is None
+    if cars_data is None:
+        return pd.DataFrame()
+
+    # Check if cars_data is a dictionary of dictionaries and convert it to DataFrame
+    if isinstance(cars_data, dict):
+        cars_df = pd.DataFrame.from_dict(cars_data, orient='index')
+    else:
+        # If cars_data is not a dictionary, assume it's a list of dictionaries
+        cars_df = pd.DataFrame(cars_data)
+
+    # Ensure that the DataFrame has the expected columns
+    required_columns = ['Price', 'Fuel_Consumption', 'Seats', 'Boot_Capacity', 'Total_Displacement_CC', 'Fuel_Tank']
+    for col in required_columns:
+        if col not in cars_df.columns:
+            cars_df[col] = 0  # Add missing columns with default values
+
+    return cars_df
 
 # Load the cars data
-cars_data = load_car_data('Malaysian_Dataset_final.csv')
-
-# Function to calculate cosine similarity
-def cosine_similarity(vec_a, vec_b):
-    dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
-    norm_a = math.sqrt(sum(a ** 2 for a in vec_a))
-    norm_b = math.sqrt(sum(b ** 2 for b in vec_b))
-    
-    if norm_a == 0 or norm_b == 0:
-        return 0
-    return dot_product / (norm_a * norm_b)
+cars_df = load_cars_data()
 
 # Function to get recommendations by cosine similarity
 def get_recommendations_by_cosine_similarity(user_preferences):
-    recommendations = []
-    for car in cars_data:
-        car_features = [
-            car['Price (RM)'],
-            car['Fuel_Consumption'],
-            car['Seats'],
-            car['Boot_Capacity'],
-            car['Total Displacement (CC)'],
-            car['Fuel_Tank']
-        ]
-        similarity_score = cosine_similarity(user_preferences[0], car_features)
-        if similarity_score > 0:
-            car_copy = car.copy()
-            car_copy['Similarity'] = round(similarity_score * 100, 2)
-            recommendations.append(car_copy)
+    if cars_df.empty:
+        return pd.DataFrame()  # Return an empty DataFrame if cars_df is empty
 
-    # Sort by similarity
-    recommendations_sorted = sorted(recommendations, key=lambda x: x['Similarity'], reverse=True)
+    car_features = cars_df[['Price', 'Fuel_Consumption', 'Seats', 'Boot_Capacity', 'Total_Displacement_CC', 'Fuel_Tank']]
+    
+    # Normalize feature vectors
+    scaler = MinMaxScaler()
+    normalized_car_features = scaler.fit_transform(car_features)
+    normalized_user_preferences = scaler.transform(user_preferences)
+    
+    # Calculate cosine similarity between user preferences and car features
+    similarity_scores = cosine_similarity(normalized_car_features, normalized_user_preferences)
+    
+    # Convert similarity scores to DataFrame and merge with cars_df
+    similarity_df = pd.DataFrame(similarity_scores * 100, columns=['Similarity'], index=cars_df.index)
+    similarity_df['Similarity'] = similarity_df['Similarity'].apply(lambda x: round(x, 2))  # Round to two decimal places
+    recommendations = pd.concat([cars_df, similarity_df], axis=1)
+    
+    # Filter out cars with similarity score of 0 or less
+    recommendations_filtered = recommendations[recommendations['Similarity'] > 0]
+    
+    # Sort recommendations by similarity score (higher score indicates closer match)
+    recommendations_sorted = recommendations_filtered.sort_values(by='Similarity', ascending=False)
     return recommendations_sorted
 
-# Functions for monthly payment and desired amount filtering
+# Function to get recommendations based on monthly payment
 def get_recommendations_by_monthly_payment(user_salary, num_years, deposit_percentage, interest_percentage):
     monthly_payment = user_salary / 3
-    recommendations = []
-    for car in cars_data:
-        interest_payment = (interest_percentage / 100) * car['Price (RM)'] * num_years
-        down_payment = deposit_percentage * car['Price (RM)']
-        total_payment = (car['Price (RM)'] + interest_payment) - down_payment
-        if total_payment <= monthly_payment * (num_years * 12):
-            recommendations.append(car)
-    return sorted(recommendations, key=lambda x: x['Price (RM)'])
+    interest_payment = interest_percentage / 100 * cars_df['Price'] * num_years
+    down_payment = deposit_percentage * cars_df['Price']
+    affordable_cars = cars_df[(cars_df['Price'] + interest_payment) - down_payment <= monthly_payment * (num_years * 12)]
+    return affordable_cars
 
+# Function to get recommendations based on desired amount
 def get_recommendations_by_desired_amount(desired_amount, num_years, deposit_percentage, interest_percentage):
-    recommendations = []
-    for car in cars_data:
-        interest_payment = (interest_percentage / 100) * car['Price (RM)'] * num_years
-        down_payment = deposit_percentage * car['Price (RM)']
-        total_payment = (car['Price (RM)'] + interest_payment) - down_payment
-        if total_payment <= desired_amount * (num_years * 12):
-            recommendations.append(car)
-    return sorted(recommendations, key=lambda x: x['Price (RM)'])
+    interest_payment = interest_percentage / 100 * cars_df['Price'] * num_years
+    down_payment = deposit_percentage * cars_df['Price']
+    desired_payment = cars_df[(cars_df['Price'] + interest_payment) - down_payment <= desired_amount * (num_years * 12)]
+    return desired_payment
 
 # Route for the home page
 @app.route('/')
@@ -92,41 +96,44 @@ def find_car():
 # Route for handling form submission
 @app.route('/recommendations', methods=['POST'])
 def recommendations():
-    user_salary = float(request.form['salary'])
-    desired_amount = float(request.form['amount'])
-    num_years = int(request.form['years'])
-    deposit_percentage = float(request.form['deposit'])
-    interest_percentage = float(request.form['interest'])
-    cc = float(request.form['cc'])
-    luggage = int(request.form['Boot_Capacity'])
-    fuel_tank_capacity = float(request.form['Fuel_Tank'])
-    fuel_consumption = float(request.form['Fuel_Consump'])
-    car_seats = int(request.form['CarSeater'])
+    try:
+        user_salary = float(request.form['salary'])
+        desired_amount = float(request.form['amount'])
+        num_years = int(request.form['years'])
+        deposit_percentage = float(request.form['deposit'])
+        interest_percentage = float(request.form['interest'])
+        cc = float(request.form['cc'])
+        luggage = int(request.form['Boot_Capacity'])
+        fuel_tank_capacity = float(request.form['Fuel_Tank'])
+        fuel_consumption = float(request.form['Fuel_Consump'])
+        car_seats = int(request.form['CarSeater'])
 
-    user_payment = (user_salary / 3) * (num_years * 12)
+        user_payment = (user_salary / 3) * (num_years * 12)
 
-    recommendations_monthly_payment = get_recommendations_by_monthly_payment(user_salary, num_years, deposit_percentage, interest_percentage)
-    recommendations_sortedbyprice = sorted(recommendations_monthly_payment, key=lambda x: x['Price (RM)'])
+        recommendations_monthly_payment = get_recommendations_by_monthly_payment(user_salary, num_years, deposit_percentage, interest_percentage)
+        recommendations_sortedbyprice = recommendations_monthly_payment.sort_values(by='Price')
 
-    recommendations_desired_amount = get_recommendations_by_desired_amount(desired_amount, num_years, deposit_percentage, interest_percentage)
-    recommendations_sortedbydesired = sorted(recommendations_desired_amount, key=lambda x: x['Price (RM)'])
-    
-    user_preferences = [[user_payment, fuel_consumption, car_seats, luggage, cc, fuel_tank_capacity]]
-    recommendations_by_cosine_similarity = get_recommendations_by_cosine_similarity(user_preferences)
+        recommendations_desired_amount = get_recommendations_by_desired_amount(desired_amount, num_years, deposit_percentage, interest_percentage)
+        recommendations_sortedbydesired = recommendations_desired_amount.sort_values(by='Price')
+        
+        user_preferences = [[user_payment, fuel_consumption, car_seats, luggage, cc, fuel_tank_capacity]]
+        recommendations_by_cosine_similarity = get_recommendations_by_cosine_similarity(user_preferences)
 
-    user_desired = [[desired_amount * (num_years * 12), fuel_consumption, car_seats, luggage, cc, fuel_tank_capacity]]
-    recommendations_by_desired = get_recommendations_by_cosine_similarity(user_desired)
-    
-    return render_template('recommendations.html', 
-                           monthly_payment=user_salary / 3,
-                           total_months=num_years * 12,
-                           desired_payment=desired_amount,
-                           interest_payment=interest_percentage,
-                           down_payment=deposit_percentage,
-                           recommendations_monthly_payment=recommendations_sortedbyprice,
-                           recommendations_desired_amount=recommendations_sortedbydesired,
-                           recommendations_cosine_similarity=recommendations_by_cosine_similarity,
-                           recommendations_desired=recommendations_by_desired)
+        user_desired = [[desired_amount * (num_years * 12), fuel_consumption, car_seats, luggage, cc, fuel_tank_capacity]]
+        recommendations_by_desired = get_recommendations_by_cosine_similarity(user_desired)
+        
+        return render_template('recommendations.html', 
+                               monthly_payment=user_salary / 3,
+                               total_months=num_years * 12,
+                               desired_payment=desired_amount,
+                               interest_payment=interest_percentage,
+                               down_payment=deposit_percentage,
+                               recommendations_monthly_payment=recommendations_sortedbyprice,
+                               recommendations_desired_amount=recommendations_sortedbydesired,
+                               recommendations_cosine_similarity=recommendations_by_cosine_similarity,
+                               recommendations_desired=recommendations_by_desired)
+    except Exception as e:
+        return str(e), 500  # Display the error message for debugging purposes
 
 # Route to serve images from the assets folder
 @app.route('/assets/<path:filename>')
@@ -136,14 +143,21 @@ def send_file(filename):
 # Route for the car details page
 @app.route('/car/<int:car_id>')
 def car_details(car_id):
-    car = next((car for car in cars_data if car['ID'] == car_id), None)
+    car = cars_df[cars_df['ID'] == car_id].iloc[0]
     return render_template('car_details.html', car=car)
 
 @app.route('/cars/<brand>')
 def brand_cars(brand):
+    # Ensure brand name is properly capitalized to match your dataset
     brand = brand.capitalize()
-    filtered_cars = [car for car in cars_data if car['Brand'] == brand]
-    filtered_cars = sorted(filtered_cars, key=lambda x: x['Price (RM)'])
+    
+    # Filter cars by the selected brand
+    filtered_cars = cars_df[cars_df['Brand'] == brand]
+    
+    # Sort the filtered cars by price in ascending order
+    filtered_cars = filtered_cars.sort_values(by='Price')
+    
+    # Render the car list for the selected brand
     return render_template('brand_cars.html', brand=brand, cars=filtered_cars)
 
 if __name__ == '__main__':
