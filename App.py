@@ -82,7 +82,7 @@ def get_recommendations_by_desired_amount(desired_amount, num_years, deposit_per
 # Route for the home page
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('findCar.html')
 
 # Route for the findCar page
 @app.route('/findCar')
