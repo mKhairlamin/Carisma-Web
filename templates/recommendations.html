@@ -304,8 +304,8 @@
                     <div class="car-details">
                         <p><strong>{{ car['Brand'] }} {{ car['Name'] }}</strong></p><br>
                         <p>Match: {{ car['Similarity'] }}%</p>
-                        <p>RM {{ (((car['Price'] + (interest_payment/100 * car['Price'] * (total_months/12))) 
-                            - (down_payment * car['Price'])) / total_months) | round(2) }}/month</p>
+                        <p>RM {{ (((car['Price (RM)'] + (interest_payment/100 * car['Price (RM)'] * (total_months/12))) 
+                            - (down_payment * car['Price (RM)'])) / total_months) | round(2) }}/month</p>
                     </div>
                 </div>
                 {% endfor %}
@@ -341,8 +341,8 @@
                     <div class="car-details">
                         <p><strong>{{ car['Brand'] }} {{ car['Name'] }}</strong></p><br>
                         <p>Match: {{ car['Similarity'] }}%</p>
-                        <p>RM {{ (((car['Price'] + (interest_payment/100 * car['Price'] * (total_months/12))) 
-                            - (down_payment * car['Price'])) / total_months) | round(2) }}/month</p>
+                        <p>RM {{ (((car['Price (RM)'] + (interest_payment/100 * car['Price (RM)'] * (total_months/12))) 
+                            - (down_payment * car['Price (RM)'])) / total_months) | round(2) }}/month</p>
                     </div>
                 </div>
                 {% endfor %}
@@ -377,8 +377,8 @@
                     </a>
                     <div class="car-details">
                         <p><strong>{{ car['Brand'] }} {{ car['Name'] }}</strong></p>
-                        <p>RM {{ (((car['Price'] + (interest_payment/100 * car['Price'] * (total_months/12))) 
-                            - (down_payment * car['Price'])) / total_months) | round(2) }}/month</p>
+                        <p>RM {{ (((car['Price (RM)'] + (interest_payment/100 * car['Price (RM)'] * (total_months/12))) 
+                            - (down_payment * car['Price (RM)'])) / total_months) | round(2) }}/month</p>
                     </div>
                 </div>
                 {% endfor %}
@@ -413,8 +413,8 @@
                     </a>
                     <div class="car-details">
                         <p><strong>{{ car['Brand'] }} {{ car['Name'] }}</strong></p>
-                        <p>RM {{ (((car['Price'] + (interest_payment/100 * car['Price'] * (total_months/12))) 
-                            - (down_payment * car['Price'])) / total_months) | round(2) }}/month</p>
+                        <p>RM {{ (((car['Price (RM)'] + (interest_payment/100 * car['Price (RM)'] * (total_months/12))) 
+                            - (down_payment * car['Price (RM)'])) / total_months) | round(2) }}/month</p>
                     </div>
                 </div>
                 {% endfor %}
