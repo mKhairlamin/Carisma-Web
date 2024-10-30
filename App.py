@@ -9,7 +9,7 @@ from firebase_admin import credentials, db
 app = Flask(__name__)
 
 # Initialize Firebase Admin SDK with your service account credentials
-cred = credentials.Certificate('C:/Users/User/Desktop/Carisma v2/serviceAccountKey.json')  # Replace with the path to your downloaded service account file
+cred = credentials.Certificate('C:/Users/User/Desktop/Carisma-Web/serviceAccountKey.json')  # Replace with the path to your downloaded service account file
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://carisma-bc876-default-rtdb.asia-southeast1.firebasedatabase.app'
 })
