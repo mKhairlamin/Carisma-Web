@@ -6,3 +6,5 @@ itsdangerous==2.2.0
 Jinja2==3.1.4
 MarkupSafe==3.0.2
 Werkzeug==3.0.6
+pandas==2.2.1
+scikit-learn==1.4.1.post1
